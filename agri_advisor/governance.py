@@ -21,6 +21,7 @@ class AccessLevel(str, Enum):
 class Role(str, Enum):
     PUBLIC = "public"  # farmers, anonymous SMS/USSD/voice users
     EXTENSION = "extension"  # registered extension workers
+    RESEARCHER = "researcher"  # registered researchers (literature & review tools)
     CONSORTIUM = "consortium"  # project beneficiaries (confidential repository)
     DATA_OWNER = "data_owner"  # owner/curator of a closed dataset
 
@@ -29,6 +30,7 @@ class Role(str, Enum):
 _ROLE_PERMISSIONS: dict[Role, set[AccessLevel]] = {
     Role.PUBLIC: {AccessLevel.OPEN},
     Role.EXTENSION: {AccessLevel.OPEN},
+    Role.RESEARCHER: {AccessLevel.OPEN},
     Role.CONSORTIUM: {AccessLevel.OPEN, AccessLevel.EMBARGOED, AccessLevel.RESTRICTED},
     Role.DATA_OWNER: set(AccessLevel),
 }
@@ -37,6 +39,8 @@ _ROLE_PERMISSIONS: dict[Role, set[AccessLevel]] = {
 def parse_role(value: str | Role | None) -> Role:
     if isinstance(value, Role):
         return value
+    if (value or "").lower() == "admin":  # platform admins curate all tiers
+        return Role.DATA_OWNER
     try:
         return Role((value or "public").lower())
     except ValueError:

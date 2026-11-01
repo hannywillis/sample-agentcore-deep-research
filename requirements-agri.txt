@@ -10,6 +10,7 @@ uvicorn>=0.27
 python-multipart>=0.0.9
 requests>=2.31.0
 langdetect>=1.0.9
+cryptography>=42.0   # credential vault (Fernet)
 # Recommended (gradient boosting, explainability, PDF/DOCX ingestion)
 xgboost>=2.0
 shap>=0.44
