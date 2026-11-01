@@ -14,18 +14,24 @@ POST /v1/ussd                Tier 2 - USSD session webhook (CON/END protocol)
 POST /v1/voice               Tier 3 - numbered, TTS-ready text + SSML
 POST /v1/predict             WP2 predictions only (uncertainty + XAI)
 POST /v1/expert/verdict      record an expert-validation verdict
+
+Researcher API (agri_advisor.interface.research_api): /v1/auth/*, /v1/orgs,
+/v1/credentials, /v1/literature/*, /v1/library/*, /v1/reviews/*
+Kenyan channels (agri_advisor.interface.channels_api): /v1/channels/*
 """
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Any
 
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import Depends, FastAPI, Form, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from agri_advisor import __version__
+from agri_advisor.accounts.store import User
 from agri_advisor.config import FOCUS_CROPS, SUPPORTED_LANGUAGES, get_settings
 from agri_advisor.engine.recommendation import RecommendationEngine
 from agri_advisor.interface.formatters import (
@@ -35,6 +41,8 @@ from agri_advisor.interface.formatters import (
     format_voice,
     format_web,
 )
+from agri_advisor.interface.research_api import optional_user
+from agri_advisor.interface.research_api import router as research_router
 from agri_advisor.nlp.language import detect_language
 from agri_advisor.nlp.phrases import phrase
 from agri_advisor.predict.schema import FarmContext
@@ -98,24 +106,41 @@ def health() -> dict[str, Any]:
     }
 
 
+ANONYMOUS_ROLES = {"public", "extension", "researcher"}
+
+
+def _effective_role(requested: str | None, user: User | None) -> str | None:
+    """Logged-in users get their account role; anonymous callers cannot claim
+    privileged tiers (consortium/data_owner) unless explicitly allowed."""
+    if user is not None:
+        return user.role
+    allow = os.environ.get("ALLOW_ANONYMOUS_PRIVILEGED_ROLES", "false").lower() == "true"
+    if requested and requested.lower() not in ANONYMOUS_ROLES and not allow:
+        raise HTTPException(401, f"role '{requested}' requires login (Bearer token)")
+    return requested
+
+
 @app.post("/v1/advise")
-def advise(req: AdviseRequest) -> dict[str, Any]:
+def advise(req: AdviseRequest, user: User | None = Depends(optional_user)) -> dict[str, Any]:
     _check_language(req.language)
+    role = _effective_role(req.role, user)
     rec = get_engine().recommend(
-        req.query, req.context, req.language, "web", req.role, req.user_id
+        req.query, req.context, req.language, "web", role, req.user_id
     )
     return format_web(rec)
 
 
 @app.post("/v1/extension")
-def extension(req: AdviseRequest) -> dict[str, Any]:
+def extension(
+    req: AdviseRequest, user: User | None = Depends(optional_user)
+) -> dict[str, Any]:
     _check_language(req.language)
     rec = get_engine().recommend(
         req.query,
         req.context,
         req.language,
         "extension",
-        req.role or "extension",
+        _effective_role(req.role, user) or "extension",
         req.user_id,
     )
     return format_extension(rec)
@@ -141,8 +166,22 @@ def ussd(
 ) -> str:
     """Menu: 1 = ask a question, 2 = crop risk tips, 3 = request expert call-back."""
     _check_language(language)
+    return handle_ussd(sessionId, phoneNumber, text, language)
+
+
+def handle_ussd(
+    session_id: str,
+    phone: str,
+    text: str,
+    language: str | None = None,
+    menu_language: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> str:
+    """Shared USSD state machine (generic + Africa's Talking webhooks)."""
     steps = text.split("*") if text else []
-    lang = language or (detect_language(steps[-1]) if len(steps) > 1 else "en")
+    lang = language or (
+        detect_language(steps[-1]) if len(steps) > 1 and steps[0] == "1" else None
+    ) or menu_language or "en"
     eng = get_engine()
     if not steps:
         return f"CON {phrase('ussd_welcome', lang)}"
@@ -150,9 +189,7 @@ def ussd(
         if len(steps) == 1:
             return f"CON {phrase('ussd_ask', lang)}"
         question = "*".join(steps[1:])
-        rec = eng.recommend(
-            question, None, language, "ussd", "public", phoneNumber or None
-        )
+        rec = eng.recommend(question, None, language, "ussd", "public", phone or None)
         return f"END {format_ussd_answer(rec)}"
     if steps[0] == "2":
         if len(steps) == 1:
@@ -164,15 +201,15 @@ def ussd(
         rec = eng.recommend(
             f"main pests diseases and risks for {crop} and how to manage them",
             None,
-            language or "en",
+            language or menu_language or "en",
             "ussd",
             "public",
-            phoneNumber or None,
+            phone or None,
         )
         return f"END {format_ussd_answer(rec)}"
     if steps[0] == "3":
         eng.protocol.enqueue(
-            {"type": "callback_request", "session": sessionId, "phone": phoneNumber}
+            {"type": "callback_request", "session": session_id, "phone": phone, **(extra or {})}
         )
         return f"END {phrase('ussd_expert', lang)}"
     return f"END {phrase('ussd_welcome', lang)}"
@@ -208,3 +245,10 @@ def expert_verdict(req: VerdictRequest) -> dict[str, Any]:
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+# Routers are included last so they can import helpers defined above.
+app.include_router(research_router)
+from agri_advisor.interface.channels_api import router as channels_router  # noqa: E402
+
+app.include_router(channels_router)
