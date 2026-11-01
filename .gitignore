@@ -40,3 +40,7 @@ infra-cdk/config.yaml
 .mypy_cache/
 infra-cdk/cdk.out
 test-scripts/results/
+
+# Agricultural decision-support platform local artefacts
+.agri_store/
+.agri_models/
