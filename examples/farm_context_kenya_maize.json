@@ -1,0 +1,11 @@
+{
+  "location": {"country": "KE", "admin1": "Trans Nzoia", "latitude": 1.02, "longitude": 35.0, "elevation_m": 1900},
+  "climate": {"season_rainfall_mm": 420, "rainfall_anomaly_pct": -15, "mean_temp_c": 21, "max_temp_c": 28,
+              "dry_spell_days": 12, "relative_humidity_pct": 65, "forecast_rainfall_mm": 380,
+              "rainfall_onset_date": "2027-03-15"},
+  "soil": {"ph": 5.1, "organic_carbon_pct": 0.9, "total_nitrogen_pct": 0.09, "phosphorus_ppm": 11},
+  "remote_sensing": {"ndvi_mean": 0.48, "ndvi_anomaly": -0.05, "evi_mean": 0.31, "soil_moisture_pct": 18},
+  "farm": {"crop": "maize", "variety_maturity": "medium", "planting_date": "2027-03-22", "area_ha": 0.8,
+           "fertilizer_n_kg_ha": 40, "fertilizer_p_kg_ha": 20, "manure_applied": true, "irrigated": false,
+           "improved_seed": true, "intercropped_legume": false, "extension_access": true, "pest_sightings": true}
+}
