@@ -2,7 +2,7 @@
 
 Sample open-source app that automates deep research on [Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/). Given a user question, the AI agent iteratively queries data sources, cross-references findings, and generates a structured report with citations and visualizations. The app features a frontend with real-time streaming, over 10 configurable data connectors spanning enterprise data on AWS and external APIs, and a modular architecture based on the [FAST template](https://github.com/awslabs/fullstack-solution-template-for-agentcore). Read more in [our blog](https://builder.aws.com/content/2sLJJhyoVZLIco77zHkvN2IBB6P/accelerate-deep-research-workflows-with-amazon-bedrock-agentcore-application).
 
-![Workflow](docs/figures/workflow.png)
+![Workflow](figures/workflow.png)
 
 **✨ Key features:**
 - **Multi-source analysis**: Search across enterprise data, Internet, and specialized APIs (10+ built-in sources)
@@ -39,7 +39,7 @@ Run the evaluation yourself with `uv run test-scripts/eval-agent.py` (see [eval 
 
 ## 🚀 Deployment
 
-**Prerequisites**: [Node.js 20+](https://nodejs.org/), [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), [AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html), [Python 3.10+](https://www.python.org/downloads/), [uv](https://docs.astral.sh/uv/), and [Docker](https://docs.docker.com/engine/install/). See [deployment guide](docs/DEPLOYMENT.md) for details.
+**Prerequisites**: [Node.js 20+](https://nodejs.org/), [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), [AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html), [Python 3.10+](https://www.python.org/downloads/), [uv](https://docs.astral.sh/uv/), and [Docker](https://docs.docker.com/engine/install/). See [deployment guide](DEPLOYMENT.md) for details.
 
 Deploying AgentCore Deep Research stack requires a few commands:
 
@@ -59,11 +59,11 @@ npm run deploy:frontend   # Frontend only
 cdk deploy                # Backend only
 ```
 
-See the [deployment guide](docs/DEPLOYMENT.md) for detailed instructions.
+See the [deployment guide](DEPLOYMENT.md) for detailed instructions.
 
 ## ▶️ Usage
 
-![UI Screenshot](docs/figures/ui-screenshot.jpg)
+![UI Screenshot](figures/ui-screenshot.jpg)
 
 1. Open the application URL (from CDK outputs)
 2. Log in with Cognito credentials
@@ -80,7 +80,7 @@ See the [deployment guide](docs/DEPLOYMENT.md) for detailed instructions.
 
 ## ℹ️ Architecture
 
-![Architecture Diagram](docs/figures/adr-architecture.png)
+![Architecture Diagram](figures/adr-architecture.png)
 
 The architecture uses Amazon Cognito in four places:
 1. User-based login to the frontend web application on CloudFront
@@ -108,7 +108,7 @@ The application includes multiple Lambda-based tools behind AgentCore Gateway wi
 
 The modular architecture makes it easy to integrate additional data sources for developers.
 
-> **Note:** Several tools connect to external (non-AWS) APIs: Tavily, ArXiv, OpenFDA, AlphaVantage, FRED, PubMed, SEC EDGAR, and ClinicalTrials.gov. Of these, Tavily and AlphaVantage require API keys obtained through external registration. All external APIs, whether free or paid, are subject to the terms and conditions of their respective providers. We are not responsible for the availability, accuracy, or usage policies of third-party APIs. Please review each provider's terms before use. See the [deployment guide](docs/DEPLOYMENT.md) for stack setup instructions and which tools require API keys.
+> **Note:** Several tools connect to external (non-AWS) APIs: Tavily, ArXiv, OpenFDA, AlphaVantage, FRED, PubMed, SEC EDGAR, and ClinicalTrials.gov. Of these, Tavily and AlphaVantage require API keys obtained through external registration. All external APIs, whether free or paid, are subject to the terms and conditions of their respective providers. We are not responsible for the availability, accuracy, or usage policies of third-party APIs. Please review each provider's terms before use. See the [deployment guide](DEPLOYMENT.md) for stack setup instructions and which tools require API keys.
 
 ### Tech Stack
 
@@ -149,7 +149,7 @@ docker compose up --build
   ```
 - `AWS_DEFAULT_REGION`: The region where you deployed the stack (e.g., `us-east-1`)
 
-See the [local development guide](docs/LOCAL_DEVELOPMENT.md) for detailed setup instructions.
+See the [local development guide](LOCAL_DEVELOPMENT.md) for detailed setup instructions.
 
 
 ## 🎓 SFT Distillation (Experimental)
@@ -504,6 +504,6 @@ Ultimately it is your responsibility as the developer to ensure all aspects of t
 
 ## 👤 Team
 
-| ![image](docs/figures/team/nikita.jpeg) | ![image](docs/figures/team/aiham.jpeg) | ![image](docs/figures/team/jack.jpeg) | ![image](docs/figures/team/elizaveta.jpeg) |
+| ![image](figures/team/nikita.jpeg) | ![image](figures/team/aiham.jpeg) | ![image](figures/team/jack.jpeg) | ![image](figures/team/elizaveta.jpeg) |
 |---|---|---|---|
 | [Nikita Kozodoi](https://www.linkedin.com/in/kozodoi/) | [Aiham Taleb](https://www.linkedin.com/in/aihamtaleb/) | [Jack Butler](https://www.linkedin.com/in/jackbutler-a/) | [Elizaveta Zinovyeva](https://www.linkedin.com/in/zinov-liza/) |
