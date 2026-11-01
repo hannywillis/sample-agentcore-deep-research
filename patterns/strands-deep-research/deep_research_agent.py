@@ -395,7 +395,7 @@ def create_deep_research_agent(
 
         tools.extend(AGRI_TOOLS)
         print("[AGENT] AGRI_MODE enabled: added agri_knowledge_search, "
-              "agri_recommendation")
+              "agri_recommendation, literature_search, literature_access")
 
     try:
         print("[AGENT] Starting agent creation with Gateway tools...")

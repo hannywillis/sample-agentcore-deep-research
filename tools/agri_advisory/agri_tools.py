@@ -95,4 +95,50 @@ def agri_recommendation(
     return json.dumps(rec.to_dict(), ensure_ascii=False, default=str)
 
 
-AGRI_TOOLS = [agri_knowledge_search, agri_recommendation]
+@tool
+def literature_search(
+    query: str,
+    year_from: int | None = None,
+    open_access_only: bool = False,
+    max_results: int = 15,
+) -> str:
+    """Search open scholarly literature (OpenAlex, Crossref, DOAJ, Europe PMC,
+    CGSpace) in parallel, de-duplicated and ranked.
+
+    Use this for researcher questions that need peer-reviewed evidence beyond
+    the curated knowledge base. Each result includes a citation, DOI, abstract
+    and open-access status.
+
+    Args:
+        query: Search terms, e.g. "drought tolerant maize yield Kenya".
+        year_from: Optional earliest publication year.
+        open_access_only: Only return open-access papers.
+        max_results: Maximum papers to return (after de-duplication).
+    """
+    from agri_advisor.literature.search import federated_search
+
+    res = federated_search(query, None, 15, None, year_from, None, open_access_only,
+                           max_results)
+    return json.dumps({
+        "sources": res.source_status,
+        "papers": [{k: p.to_dict()[k] for k in ("citation", "doi", "year", "is_oa", "url",
+                                                 "pdf_url", "abstract")} for p in res.papers],
+    }, default=str)[:30000]
+
+
+@tool
+def literature_access(doi: str) -> str:
+    """List open-access full-text locations for a DOI (Unpaywall/OA copies).
+
+    Institutional entitlements are applied in the web API per logged-in user,
+    not in the agent, so licensed content never enters shared agent context.
+
+    Args:
+        doi: Digital Object Identifier, e.g. "10.1016/j.fcr.2020.107800".
+    """
+    from agri_advisor.literature.access import resolve_access
+
+    return json.dumps([o.to_dict() for o in resolve_access(doi)])
+
+
+AGRI_TOOLS = [agri_knowledge_search, agri_recommendation, literature_search, literature_access]
