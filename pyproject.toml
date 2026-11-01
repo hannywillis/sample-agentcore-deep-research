@@ -50,14 +50,35 @@ agent-strands = [
     "mcp==1.28.1",
 ]
 
+# Agricultural decision-support platform (agri_advisor package)
+agri = [
+    "numpy>=1.24",
+    "scikit-learn>=1.3",
+    "joblib>=1.3",
+    "pydantic>=2.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "python-multipart>=0.0.9",
+    "langdetect>=1.0.9",
+]
+
+# Optional extras for the agri platform (boosting, XAI, dense embeddings, PDF/DOCX)
+agri-extras = [
+    "xgboost>=2.0",
+    "shap>=0.44",
+    "sentence-transformers>=2.6",
+    "pypdf>=4.0",
+    "python-docx>=1.1",
+]
+
 # All dependencies for local development
 all = [
-    "agentcore-deep-research[dev,agent-strands]",
+    "agentcore-deep-research[dev,agent-strands,agri]",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["gateway*", "scripts*"]
+include = ["gateway*", "scripts*", "agri_advisor*"]
 exclude = ["tests*", "infra-cdk*", "frontend*", "patterns*"]
 
 [tool.ruff]
@@ -69,7 +90,11 @@ select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "T20"]
 ignore = ["S101", "S603", "S607"]                                    # Allow assert, subprocess calls
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]  # Allow assert in tests
+"tests/*" = ["S101", "S106"]  # Allow assert / dummy secrets in tests
+"agri_advisor/*" = ["T201"]  # CLI entry points print to stdout
+"agri_advisor/*/*.py" = ["T201"]  # CLI entry points print to stdout
+"agri_advisor/nlp/phrases.py" = ["E501"]  # Long multilingual phrase strings
+"agri_advisor/predict/*.py" = ["N803", "N806"]  # ML convention: X for feature matrix  # Long multilingual phrase strings
 "test-scripts/*.py" = ["E402", "T201", "S110", "B904", "B007", "E501"]  # Test scripts
 "infra-cdk/lambdas/zip-packager/*.py" = ["S310"]  # CFN response URL is trusted
 "gateway/tools/*/lambda.py" = ["S310"]  # Gateway tools use trusted API URLs
