@@ -15,8 +15,13 @@ ENV UV_SYSTEM_PYTHON=1 \
 
 # Copy pyproject.toml and gateway package for installation
 COPY pyproject.toml .
+COPY requirements-agri.txt .
 COPY gateway/ gateway/
 COPY tools/ tools/
+# Agricultural decision-support platform (used when AGRI_MODE=true)
+COPY agri_advisor/ agri_advisor/
+COPY config/ config/
+COPY data/knowledge_base/ data/knowledge_base/
 
 # Install system dependencies for weasyprint (PDF generation)
 # `apt-get upgrade` applies OS security updates missing from the base image.
@@ -33,7 +38,8 @@ RUN uv pip install --no-cache -r requirements.txt && \
 
 # Install package with only core dependencies (no dev/agent optional deps)
 RUN uv pip install --no-cache -e . --no-deps && \
-    uv pip install --no-cache requests>=2.31.0
+    uv pip install --no-cache requests>=2.31.0 && \
+    uv pip install --no-cache -r requirements-agri.txt
 
 # Create non-root user
 RUN useradd -m -u 1000 bedrock_agentcore
@@ -44,6 +50,7 @@ EXPOSE 8080
 # Copy agent code files
 COPY patterns/strands-deep-research/deep_research_agent.py .
 COPY patterns/strands-deep-research/system_prompt.txt .
+COPY patterns/strands-deep-research/agri_prompt_addendum.txt .
 COPY patterns/strands-deep-research/report_upload_hook.py .
 COPY patterns/strands-deep-research/strands_compat.py .
 COPY patterns/strands-deep-research/research_rubric.py .

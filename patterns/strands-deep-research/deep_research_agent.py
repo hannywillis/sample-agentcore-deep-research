@@ -43,6 +43,12 @@ strands_compat.apply_shims()
 app = BedrockAgentCoreApp()
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "system_prompt.txt"
+AGRI_PROMPT_PATH = Path(__file__).parent / "agri_prompt_addendum.txt"
+
+# Agricultural decision-support mode (CNPq PROAFRICA platform, see agri_advisor/).
+# When enabled the agent gets local evidence-grounded agri tools and an
+# agricultural prompt addendum on top of the deep-research workflow.
+AGRI_MODE = os.environ.get("AGRI_MODE", "false").lower() == "true"
 
 # All known data sources with their tool names
 ALL_DATA_SOURCES = {
@@ -197,6 +203,9 @@ def load_system_prompt(
     # Replace the data retrieval section in the prompt
     pattern = r"### Data Retrieval \(via Gateway\)\n(?:- .*\n)*"
     base_prompt = re.sub(pattern, tools_section, base_prompt)
+
+    if AGRI_MODE and AGRI_PROMPT_PATH.exists():
+        base_prompt += "\n" + AGRI_PROMPT_PATH.read_text(encoding="utf-8")
 
     # Prepend today's date so the agent has temporal context
     today = datetime.now(timezone.utc).strftime("%B %d, %Y")
@@ -378,6 +387,15 @@ def create_deep_research_agent(
         editor,
         execute_python,
     ]
+
+    if AGRI_MODE:
+        # Imported lazily so the default deep-research image does not need the
+        # agri ML dependencies unless AGRI_MODE is enabled.
+        from tools.agri_advisory.agri_tools import AGRI_TOOLS
+
+        tools.extend(AGRI_TOOLS)
+        print("[AGENT] AGRI_MODE enabled: added agri_knowledge_search, "
+              "agri_recommendation")
 
     try:
         print("[AGENT] Starting agent creation with Gateway tools...")
