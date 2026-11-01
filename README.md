@@ -121,6 +121,91 @@ usage log for impact evaluation (WP3).
 
 The SMS and USSD formats follow the Africa's Talking webhook conventions.
 
+### Model retraining on open data (`predict/open_data.py`)
+`python -m agri_advisor.predict.open_data` downloads **FAOSTAT** national crop
+yields (bulk QCL Africa file) and **NASA POWER** daily climate for one cropping
+point in each of 20 African countries. It then builds
+`data/open_data/harmonised_country_season.csv` (3,954 country-crop-season rows,
+1982-2024, five focus cereals). `python -m agri_advisor.predict.train --open-data`
+retrains on that file with a **temporal split** (train < 2016, test ≥ 2016) and
+reports skill against naive baselines:
+
+| Model | Data | Hold-out result (2016-2024) | Naive baseline | Reading |
+|---|---|---|---|---|
+| Crop yield (residual on last-3-season mean) | open data | MAE 0.200 t/ha, RMSE 0.40, R² 0.89, conformal q̂ 0.43 | persistence MAE 0.200 | Matches persistence only; climate adds little at national scale |
+| Climate risk (yield shock class) | open data | AUC 0.59, accuracy 0.728 | majority class 0.729 | Weak skill; do not use for decisions |
+| Pest risk | synthetic (no open labels) | AUC 0.71 | - | Scaffold only |
+
+These are **national, ecological-scale** models. They are honest benchmarks,
+not farm-level advice. Farm/plot data (D2.3) is needed to go further. Status is
+recorded as `trained-open-data-national`, so the validation layer still escalates
+to experts.
+
+### Research literature & systematic reviews (`agri_advisor/literature`)
+- **Federated open search** over OpenAlex, Crossref, DOAJ, Europe PMC, CGSpace
+  (CGIAR), Zenodo, arXiv, CORE (free key) and Semantic Scholar. Sources are
+  queried in parallel. Results are de-duplicated by DOI and title, merged
+  (abstract, OA links, citations) and ranked, and each source reports its own status.
+- **Journal catalogue**: a curated list of OA agricultural journals and repositories
+  (AJOL, AJFAND, African Crop Science Journal, CGSpace, AGRIS, AgEcon Search,
+  Embrapa, KALRO, Research4Life …) plus a **live DOAJ journal search** by subject.
+- **Review workspace** (`library.py`):
+  - projects with a protocol (question, PICO, inclusion/exclusion);
+  - every search is logged;
+  - title/abstract and full-text screening, with exclusion reasons required;
+  - keyword prioritisation;
+  - forward/backward **snowballing**;
+  - **PRISMA 2020** counts;
+  - export to **BibTeX / RIS / CSV** (Zotero, Mendeley, EndNote, Rayyan);
+  - an evidence table and synthesis: LLM if configured, otherwise extractive and labelled;
+  - optional push of open-licence included studies into the RAG knowledge base.
+- CLI: `python -m agri_advisor.literature search "drought tolerant maize Kenya" --oa --export bibtex --out dt.bib`
+- Agent tools (`AGRI_MODE=true`): `literature_search`, `literature_access`.
+
+### Personal & institutional journal login (`agri_advisor/accounts`)
+Users register and log in (`/v1/auth/*`, bearer token). An **organisation admin**
+(e.g. the KALRO librarian) registers institutional entitlements once with
+`for_org=true`, and every member inherits them. Users can add personal ones too;
+personal entries take precedence. Secrets are **Fernet-encrypted at rest** and
+only ever returned masked.
+
+| Provider | What you store | What the platform does |
+|---|---|---|
+| `ezproxy` / `research4life` | proxy prefix, e.g. `https://ezproxy.uni.ac.ke/login?url=` | builds proxied links. The server only downloads if you also store the username/password **and** set `ALLOW_PROXY_SESSION_LOGIN=true` (check your licence first) |
+| `openathens` | your OpenAthens domain | builds redirector links that open the publisher after you sign in |
+| `link_template` | WAYFless / Shibboleth / link-resolver URL with `{doi}` | builds the link |
+| `elsevier`, `springer`, `wiley` | institutional TDM API key / insttoken / token | **server-side full-text download** via the publisher's TDM API |
+| `unpaywall`, `openalex`, `core`, `semantic_scholar` | email / API keys | better OA discovery and higher search quotas |
+
+`POST /v1/literature/access {doi}` returns every route this user has to the full
+text, open copies first. `POST /v1/literature/fulltext` downloads into the
+user's **private** library (`/v1/library/files`). Licensed PDFs are never added to
+the shared farmer knowledge base. Single sign-on (OpenAthens/Shibboleth) needs
+the user's browser, so those routes return links rather than server downloads.
+
+### Kenyan communication channels (`agri_advisor/channels`)
+| Channel | Operators | Endpoint |
+|---|---|---|
+| USSD (Africa's Talking) | Safaricom, Airtel, Telkom | `POST /v1/channels/at/ussd` |
+| SMS in/out (Africa's Talking or direct operator bulk-SMS / SDP contract) | Safaricom, Airtel, Telkom | `POST /v1/channels/at/sms`, `POST /v1/channels/send` |
+| Voice / IVR (Africa's Talking XML, DTMF crop menu) | all | `POST /v1/channels/at/voice` |
+| WhatsApp Business Cloud API | - | `GET/POST /v1/channels/whatsapp` |
+| M-Pesa STK push (Safaricom Daraja, optional premium services) | Safaricom | `POST /v1/channels/mpesa/stk`, `/mpesa/callback` |
+
+- The operator comes from the gateway `networkCode` (63902 Safaricom, 63903 Airtel,
+  63907 Telkom) or from the CA numbering-plan prefix. Prefix detection is
+  approximate because of number portability.
+- Kenyan numbers get Kiswahili menus by default (`KENYA_DEFAULT_LANGUAGE`).
+- Per-operator routing: `SMS_ROUTE_<OPERATOR>=africastalking|http`.
+- `CHANNELS_DRY_RUN=true` (the default) logs instead of sending.
+- `GET /v1/channels/status` shows what is configured.
+- **Going live requires**:
+  - an Africa's Talking account (API key, sender ID, and a USSD code / shortcode, which AT provisions with the telcos);
+  - Daraja keys for M-Pesa;
+  - a WhatsApp Business number;
+  - a **public HTTPS URL** for the callbacks.
+
+
 ## Quickstart
 
 ```bash
@@ -130,8 +215,9 @@ cp .env.example .env                         # optional - defaults work offline
 # 1. Build the knowledge base (sample docs, or your own)
 python -m agri_advisor.rag.ingest --rebuild
 
-# 2. Train scaffold models (SYNTHETIC data - development only; also auto-trained)
-python -m agri_advisor.predict.train --synthetic
+# 2. Train models: open FAOSTAT + NASA POWER data (or --synthetic for offline dev)
+python -m agri_advisor.predict.open_data      # downloads + harmonises (cached after first run)
+python -m agri_advisor.predict.train --open-data
 
 # 3. Ask from the CLI (any tier / language)
 python -m agri_advisor "How do I control fall armyworm in maize?"
@@ -153,7 +239,24 @@ curl -s localhost:8000/v1/voice -H 'Content-Type: application/json' -d '{"query"
 curl -s localhost:8000/v1/extension -H 'Content-Type: application/json' -d '{"query":"maize planting","role":"extension"}'
 ```
 
-Run the tests with `pytest tests -q`.
+```bash
+# Researcher accounts, journal entitlements and reviews
+python -m agri_advisor.accounts create-admin --email admin@kalro.org
+python -m agri_advisor.accounts create-org --name KALRO --slug kalro --domain kalro.org
+TOKEN=$(curl -s localhost:8000/v1/auth/register -H 'Content-Type: application/json' \
+  -d '{"email":"you@kalro.org","password":"change-me-now","org":"kalro"}' | jq -r .token)
+curl -s localhost:8000/v1/credentials -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"provider":"ezproxy","data":{"prefix":"https://ezproxy.example.ac.ke/login?url="}}'
+curl -s localhost:8000/v1/literature/search -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"query":"drought tolerant maize Kenya","year_from":2015}'
+curl -s localhost:8000/v1/literature/access -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"doi":"10.1016/j.agsy.2025.104434"}'
+# Kenyan channels (dry-run by default)
+curl -s localhost:8000/v1/channels/at/ussd -d 'sessionId=1&phoneNumber=+254722000000&networkCode=63902&text='
+curl -s 'localhost:8000/v1/channels/operator?msisdn=0733000000'
+```
+
+Interactive API docs: `http://localhost:8000/docs`. Run the tests with `pytest tests -q`.
 
 ### Using it from the AgentCore agent
 Set `AGRI_MODE=true` on the agent runtime. The Strands agent
