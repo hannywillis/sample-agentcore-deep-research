@@ -40,6 +40,9 @@ from agri_advisor.predict.uncertainty import (
 logger = logging.getLogger(__name__)
 
 SCAFFOLD_STATUS = "scaffold-synthetic"
+# Trained on real open data (FAOSTAT + NASA POWER) at national scale; still
+# requires partner validation (D2.5) before status can become "validated".
+OPEN_DATA_STATUS = "trained-open-data-national"
 VALIDATED_STATUS = "validated"
 
 
@@ -97,9 +100,19 @@ class AgriModel:
     is_classifier: bool = False
     class_labels: list[str] = []
 
-    def __init__(self, backend: str = "random_forest", n_estimators: int = 200) -> None:
+    def __init__(
+        self,
+        backend: str = "random_forest",
+        n_estimators: int = 200,
+        min_samples_leaf: int = 3,
+        anchor_feature: str | None = None,
+    ) -> None:
         self.backend = backend
         self.n_estimators = n_estimators
+        self.min_samples_leaf = min_samples_leaf
+        # Regression only: learn the deviation from this feature (e.g. recent
+        # typical yield) instead of the absolute value - persistence-anchored.
+        self.anchor_feature = anchor_feature
         self.estimator: Any = None
         self.meta: dict[str, Any] = {}
         self.medians: dict[str, float] = {}
@@ -121,7 +134,8 @@ class AgriModel:
         cls_rf = RandomForestClassifier if self.is_classifier else RandomForestRegressor
         return cls_rf(
             n_estimators=self.n_estimators,
-            min_samples_leaf=3,
+            min_samples_leaf=self.min_samples_leaf,
+            max_features=0.5 if not self.is_classifier else "sqrt",
             n_jobs=-1,
             random_state=0,
         )
@@ -132,7 +146,15 @@ class AgriModel:
             return None
         if self.is_classifier:
             return np.stack([t.predict_proba(x)[0] for t in trees])
-        return np.array([t.predict(x)[0] for t in trees])
+        return np.array([t.predict(x)[0] for t in trees]) + self._anchor(x)[0]
+
+    def _anchor(self, X: np.ndarray) -> np.ndarray:
+        if self.is_classifier or not self.anchor_feature:
+            return np.zeros(len(X))
+        return X[:, FEATURES.index(self.anchor_feature)]
+
+    def _predict_value(self, X: np.ndarray) -> np.ndarray:
+        return self.estimator.predict(X) + self._anchor(X)
 
     # ----------------------------------------------------------------- train
     def fit(
@@ -142,49 +164,88 @@ class AgriModel:
         status: str = SCAFFOLD_STATUS,
         data_source: str = "synthetic",
         alpha: float = 0.1,
+        years: np.ndarray | None = None,
+        test_start: int | None = None,
+        features_used: list[str] | None = None,
+        baseline_pred: np.ndarray | None = None,
+        notes: str = "",
     ) -> dict[str, Any]:
-        """Train, calibrate conformal intervals and record hold-out metrics."""
-        X_tr, X_cal, y_tr, y_cal = train_test_split(
-            X, y, test_size=0.25, random_state=0
-        )
+        """Train, calibrate conformal intervals and record hold-out metrics.
+
+        Without ``years`` a random 75/25 split is used (synthetic data). With
+        ``years`` + ``test_start`` a *temporal* split is used: the model is
+        evaluated on seasons >= ``test_start`` after training on earlier ones
+        (no look-ahead), then the deployed model keeps that fit and its
+        conformal intervals are calibrated on the most recent seasons.
+        """
+        if years is not None and test_start is not None:
+            tr = years < test_start
+            X_tr, X_cal, y_tr, y_cal = X[tr], X[~tr], y[tr], y[~tr]
+            base_cal = baseline_pred[~tr] if baseline_pred is not None else None
+            split = f"temporal: train<{test_start}, test/calibration>={test_start}"
+        else:
+            idx = np.arange(len(y))
+            i_tr, i_cal = train_test_split(idx, test_size=0.25, random_state=0)
+            X_tr, X_cal, y_tr, y_cal = X[i_tr], X[i_cal], y[i_tr], y[i_cal]
+            base_cal = baseline_pred[i_cal] if baseline_pred is not None else None
+            split = "random 75/25"
         self.estimator = self._make_estimator()
-        self.estimator.fit(X_tr, y_tr)
+        self.estimator.fit(X_tr, y_tr - self._anchor(X_tr))
         self.medians = {
             f: float(np.median(X_tr[:, i])) for i, f in enumerate(NUMERIC_FEATURES)
         }
         self.train_mean = X_tr.mean(axis=0)
         self.train_std = X_tr.std(axis=0)
 
+        metrics: dict[str, Any]
         if self.is_classifier:
             proba = self.estimator.predict_proba(X_cal)
-            metrics = {
-                "auc_ovr": float(
+            labels = list(self.estimator.classes_)
+            try:
+                auc = float(
                     roc_auc_score(
                         y_cal,
                         proba[:, 1] if proba.shape[1] == 2 else proba,
                         multi_class="ovr",
+                        labels=labels,
                     )
-                ),
-                "accuracy": float((proba.argmax(axis=1) == y_cal).mean()),
+                )
+            except ValueError:
+                auc = float("nan")
+            majority = np.bincount(y_tr.astype(int)).argmax()
+            metrics = {
+                "auc_ovr": auc,
+                "accuracy": float((np.array(labels)[proba.argmax(axis=1)] == y_cal).mean()),
+                "baseline_majority_accuracy": float((y_cal == majority).mean()),
             }
         else:
-            pred = self.estimator.predict(X_cal)
+            pred = self._predict_value(X_cal)
             self.conformal = SplitConformalRegressor(alpha)
             self.conformal.calibrate(y_cal, pred)
             metrics = {
                 "mae": float(mean_absolute_error(y_cal, pred)),
+                "rmse": float(np.sqrt(np.mean((y_cal - pred) ** 2))),
                 "r2": float(r2_score(y_cal, pred)),
                 "conformal_q_hat": self.conformal.q_hat,
             }
+            if base_cal is not None:
+                metrics["baseline_persistence_mae"] = float(
+                    mean_absolute_error(y_cal, base_cal)
+                )
         self.meta = {
             "task": self.task,
             "backend": self.backend,
             "status": status,
             "data_source": data_source,
+            "split": split,
             "n_train": int(len(y_tr)),
             "n_calibration": int(len(y_cal)),
             "metrics_holdout": metrics,
             "features": FEATURES,
+            "features_used": features_used or NUMERIC_FEATURES,
+            "anchor_feature": self.anchor_feature,
+            "min_samples_leaf": self.min_samples_leaf,
+            "notes": notes,
             "trained_at": datetime.now(timezone.utc).isoformat(),
             "version": datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"),
         }
@@ -195,7 +256,9 @@ class AgriModel:
         if self.estimator is None:
             raise RuntimeError(f"{self.task} model is not trained/loaded")
         x, imputed = context_to_vector(ctx, self.medians)
-        frac, _ = completeness_penalty(len(imputed), len(NUMERIC_FEATURES))
+        used = self.meta.get("features_used") or NUMERIC_FEATURES
+        imputed = [f for f in imputed if f in used]
+        frac, _ = completeness_penalty(len(imputed), len(used))
         tree_out = self._tree_outputs(x)
 
         probabilities = None
@@ -210,7 +273,7 @@ class AgriModel:
             }
             unc = classification_uncertainty(proba, tree_out, frac)
         else:
-            value = float(self.estimator.predict(x)[0])
+            value = max(0.0, float(self._predict_value(x)[0]))
             unc = regression_uncertainty(
                 value,
                 tree_out if tree_out is not None else np.array([value]),
@@ -248,6 +311,7 @@ class AgriModel:
                 "conformal": self.conformal,
                 "meta": self.meta,
                 "backend": self.backend,
+                "anchor_feature": self.anchor_feature,
             },
             path,
         )
@@ -260,7 +324,7 @@ class AgriModel:
     def load(cls, directory: Path) -> AgriModel:
         # Only load model files you produced yourself: joblib uses pickle.
         blob = joblib.load(directory / f"{cls.task}.joblib")
-        obj = cls(backend=blob["backend"])
+        obj = cls(backend=blob["backend"], anchor_feature=blob.get("anchor_feature"))
         obj.estimator = blob["estimator"]
         obj.medians = blob["medians"]
         obj.train_mean = blob["train_mean"]

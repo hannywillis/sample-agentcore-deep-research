@@ -133,6 +133,7 @@ NUMERIC_FEATURES: list[str] = [
     "farm.extension_access",
     "farm.pest_sightings",
     "farm.planting_delay_days",
+    "farm.previous_yield_t_ha",
 ]
 CROP_FEATURES = [f"crop.{c}" for c in ("maize", "wheat", "sorghum", "rice", "millet")]
 FEATURES: list[str] = NUMERIC_FEATURES + CROP_FEATURES
@@ -162,4 +163,5 @@ FEATURE_LABELS: dict[str, str] = {
     "farm.extension_access": "access to extension advice",
     "farm.pest_sightings": "pests seen in the field",
     "farm.planting_delay_days": "days planted after rain onset",
+    "farm.previous_yield_t_ha": "recent typical yield (last seasons)",
 }

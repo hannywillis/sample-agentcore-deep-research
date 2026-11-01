@@ -57,6 +57,7 @@ def generate(n: int = 3000, seed: int = 42) -> dict[str, np.ndarray]:
     ext = rng.random(n) < 0.4
     pests = rng.random(n) < 0.3
     delay = np.clip(rng.normal(10, 12, n), -10, 60)
+    prev_yield = np.array([BASE_YIELD_T_HA[c] for c in crops]) * rng.lognormal(0, 0.3, n)
 
     crop_onehot = np.array(
         [[c == cf.split(".")[1] for cf in CROP_FEATURES] for c in crops]
@@ -87,6 +88,7 @@ def generate(n: int = 3000, seed: int = 42) -> dict[str, np.ndarray]:
             ext,
             pests,
             delay,
+            prev_yield,
             crop_onehot,
         ]
     ).astype(np.float64)
@@ -103,6 +105,7 @@ def generate(n: int = 3000, seed: int = 42) -> dict[str, np.ndarray]:
         + 0.2 * manure
         + 0.15 * ext
         + 1.5 * (ndvi - 0.45)
+        + 0.3 * (prev_yield - base)
         - 0.02 * np.maximum(delay, 0)
         - 0.025 * dry
         - 0.6 * pests * (1 - 0.5 * intercrop)

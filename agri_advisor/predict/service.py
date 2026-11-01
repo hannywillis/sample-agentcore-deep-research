@@ -44,10 +44,21 @@ class PredictiveService:
         d = self.settings.model_dir
         missing = [cls for cls in ALL_MODELS if not cls.exists(d)]
         if missing and self.settings.auto_train_scaffold:
-            logger.warning(
-                "Models missing in %s - training SCAFFOLD models on synthetic data", d
-            )
-            train_scaffold_models(self.settings)
+            from agri_advisor.predict.open_data import OUT_CSV
+
+            if OUT_CSV.exists():
+                from agri_advisor.predict.train import OPEN_DATA_NOTES, train_from_csv
+
+                logger.warning(
+                    "Models missing in %s - training on open data %s", d, OUT_CSV.name
+                )
+                train_from_csv(OUT_CSV, notes=OPEN_DATA_NOTES)
+            else:
+                logger.warning(
+                    "Models missing in %s - training SCAFFOLD models on synthetic data",
+                    d,
+                )
+                train_scaffold_models(self.settings)
         for cls in ALL_MODELS:
             if cls.exists(d):
                 self.models[cls.task] = cls.load(d)

@@ -44,3 +44,9 @@ test-scripts/results/
 # Agricultural decision-support platform local artefacts
 .agri_store/
 .agri_models/
+
+# Open-data raw downloads (rebuilt by agri_advisor.predict.open_data)
+data/open_data/raw/
+# Platform runtime databases / secrets
+.agri_store/
+*.sqlite3
