@@ -1,0 +1,120 @@
+# Expert Validation Protocol (WP1 Task 1.7 / D1.7, cross-cutting Responsible AI)
+#
+# Defines WHEN an AI-generated recommendation must be escalated to a human
+# agronomist/extension expert instead of (or before) being delivered as final.
+# Reviewed and owned by the consortium's expert-validation lead; every change
+# should be versioned and noted in the D1.7 report.
+version: "0.1.0"
+
+thresholds:
+  # Retrieval: at least this many passages with relevance >= min_top_score.
+  min_evidence_count: 1
+  min_top_score: 0.15
+  # Prediction confidence below this (0..1) triggers escalation.
+  min_prediction_confidence: 0.35
+  # Any model output with a confidence LEVEL in this list triggers escalation.
+  escalate_confidence_levels: ["low"]
+  # Escalate whenever a prediction comes from a model that has not been
+  # validated on field data (scaffold/synthetic models). Keep true until D2.5.
+  escalate_unvalidated_models: true
+
+# Agronomic risk outcomes that always require expert sign-off.
+high_risk_predictions:
+  pest_risk: ["high"]
+  climate_risk: ["high"]
+
+# Keywords (any language) that signal high-risk topics: chemical use, human or
+# animal health, regulated products, irreversible/high-cost decisions.
+# Matching is case-insensitive on whole words / phrases.
+high_risk_keywords:
+  chemical:
+    - pesticide
+    - insecticide
+    - herbicide
+    - fungicide
+    - spray
+    - dose
+    - dosage
+    - poison
+    - chemical
+    - dawa ya kuua wadudu   # sw: insecticide
+    - kemikali              # sw
+    - pesticides            # fr/en
+    - pesticide             # fr
+    - agrotóxico            # pt
+    - veneno                # pt
+    - maganin kwari         # ha: insecticide
+  health_safety:
+    - aflatoxin
+    - mould
+    - mold
+    - sumukuvu              # sw: aflatoxin
+    - poisoning
+    - livestock
+    - children
+  regulated_or_costly:
+    - loan
+    - credit
+    - gmo
+    - transgenic
+    - sell my land
+
+# Vocabulary used to decide whether a query is agricultural at all. If none of
+# these terms appear AND retrieval is weak, the query is out-of-domain.
+domain_terms:
+  - maize
+  - corn
+  - wheat
+  - sorghum
+  - rice
+  - millet
+  - crop
+  - farm
+  - field
+  - plant
+  - planting
+  - seed
+  - soil
+  - fertilizer
+  - manure
+  - pest
+  - disease
+  - weed
+  - harvest
+  - storage
+  - rain
+  - drought
+  - yield
+  - irrigation
+  - armyworm
+  - striga
+  - rust
+  - blast
+  - aflatoxin
+  - lime
+  - variety
+  - shamba
+  - mahindi
+  - kilimo
+  - gona
+  - noma
+  - masara
+  - champ
+  - culture
+  - maïs
+  - lavoura
+  - milho
+  - plantio
+
+review:
+  # Where escalated items are queued for expert review (JSONL).
+  queue_enabled: true
+  # Number of independent validators per item (inter-rater agreement, D1.7).
+  validators_per_item: 2
+  # Verdict scale used by validators.
+  verdicts: ["approved", "approved_with_edits", "rejected"]
+  rubric:
+    - scientific_accuracy
+    - agronomic_appropriateness
+    - risk_relevance
+    - clarity_for_farmers
